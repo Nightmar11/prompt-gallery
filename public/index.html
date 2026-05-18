@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prompt Gallery</title>
+<style>
+  :root{--bg:#000;--s:#0a0a0a;--s2:#141414;--b:#1f1f1f;--t:#d4d4d4;--t2:#555;--w:#fff;--dim:#888;--r:6px}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;background:var(--bg);color:var(--t);min-height:100vh;-webkit-font-smoothing:antialiased}
+
+  .header{position:sticky;top:0;z-index:100;background:rgba(0,0,0,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--b);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .logo{font-size:15px;font-weight:600;letter-spacing:.5px;color:#fff}
+  .header-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .search-box{position:relative;flex:1;max-width:320px;min-width:140px}
+  .search-box input{width:100%;padding:7px 12px;background:var(--s2);border:1px solid var(--b);border-radius:var(--r);color:var(--t);font-size:13px;outline:none;transition:border .2s}
+  .search-box input::placeholder{color:var(--t2)}
+  .search-box input:focus{border-color:#333}
+
+  .btn{padding:7px 14px;border:1px solid var(--b);border-radius:var(--r);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;background:var(--s2);color:var(--t)}
+  .btn:hover{border-color:#444;color:#fff}
+  .btn-primary{background:#fff;color:#000;border-color:#fff}
+  .btn-primary:hover{background:#d4d4d4;border-color:#d4d4d4;color:#000}
+
+  .tag-bar{padding:10px 28px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--b);background:var(--bg)}
+  .tag-chip{padding:4px 12px;border-radius:3px;font-size:12px;cursor:pointer;border:1px solid var(--b);background:transparent;color:var(--t2);transition:all .15s;user-select:none}
+  .tag-chip:hover{color:var(--t);border-color:#333}
+  .tag-chip.active{background:#fff;color:#000;border-color:#fff}
+
+  .stats-bar{padding:8px 28px;font-size:12px;color:var(--t2);border-bottom:1px solid var(--b)}
+
+  .gallery{padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+  .card{background:var(--s);border:1px solid var(--b);border-radius:var(--r);overflow:hidden;transition:border-color .2s}
+  .card:hover{border-color:#333}
+  .card-img-wrap{position:relative;width:100%;aspect-ratio:1;background:var(--s2);cursor:pointer;overflow:hidden}
+  .card-img-wrap img{width:100%;height:100%;object-fit:cover;opacity:.92;transition:opacity .2s}
+  .card:hover .card-img-wrap img{opacity:1}
+  .card-img-wrap .overlay{position:absolute;inset:0;background:rgba(0,0,0,.5);opacity:0;transition:opacity .2s;display:flex;align-items:center;justify-content:center}
+  .card:hover .overlay{opacity:1}
+  .overlay .view-btn{padding:5px 14px;border-radius:3px;font-size:12px;background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.2);cursor:pointer}
+  .type-badge{position:absolute;top:8px;right:8px;padding:2px 8px;border-radius:2px;font-size:11px;font-weight:500;z-index:2}
+  .type-badge.t2i{background:rgba(255,255,255,.9);color:#000}
+  .type-badge.i2i{background:rgba(120,120,120,.85);color:#fff}
+
+  .card-body{padding:12px 14px}
+  .card-prompt{font-size:13px;line-height:1.55;color:var(--t);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:8px}
+  .card-tags{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+  .card-tags .tag{font-size:11px;padding:1px 7px;border-radius:2px;background:var(--s2);color:var(--t2);border:1px solid var(--b)}
+  .card-footer{display:flex;align-items:center;justify-content:space-between}
+  .card-time{font-size:11px;color:var(--t2)}
+  .card-actions{display:flex;gap:2px}
+  .card-actions button{width:28px;height:28px;border-radius:3px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;cursor:pointer;font-size:12px;background:transparent;color:var(--t2);transition:all .15s}
+  .card-actions button:hover{color:#fff;border-color:#333}
+  .card-actions button.del-btn:hover{color:#ff4d6a}
+  .card-actions button.copied{color:#00d68f!important}
+  .no-img{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--t2);font-size:13px;letter-spacing:1px}
+
+  .modal-mask{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);align-items:center;justify-content:center}
+  .modal-mask.show{display:flex}
+  .modal{background:var(--s);border:1px solid var(--b);border-radius:var(--r);padding:24px;width:90%;max-width:480px;max-height:90vh;overflow-y:auto}
+  .modal h2{font-size:15px;font-weight:600;margin-bottom:16px;color:#fff}
+  .modal label{display:block;font-size:12px;color:var(--t2);margin-bottom:4px;margin-top:14px}
+  .modal input[type=text],.modal textarea{width:100%;padding:9px 12px;background:var(--s2);border:1px solid var(--b);border-radius:var(--r);color:var(--t);font-size:13px;outline:none;font-family:inherit;transition:border .2s}
+  .modal input:focus,.modal textarea:focus{border-color:#333}
+  .modal textarea{resize:vertical;min-height:90px}
+  .modal-actions{display:flex;gap:6px;justify-content:flex-end;margin-top:20px}
+  .dropzone{border:1px dashed var(--b);border-radius:var(--r);padding:28px;text-align:center;cursor:pointer;transition:border-color .2s;margin-top:6px}
+  .dropzone:hover,.dropzone.dragover{border-color:#444}
+  .dropzone p{color:var(--t2);font-size:12px}
+  .dropzone-preview{margin-top:8px;max-width:180px;max-height:180px;border-radius:var(--r);object-fit:cover}
+  .url-or{text-align:center;color:var(--t2);font-size:11px;margin:6px 0}
+  .tag-select{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
+  .tag-select label{display:inline-flex;align-items:center;gap:3px;padding:3px 10px;border-radius:3px;font-size:12px;background:transparent;border:1px solid var(--b);color:var(--t2);cursor:pointer;transition:all .15s;margin:0}
+  .tag-select label:has(input:checked){background:#fff;color:#000;border-color:#fff}
+  .tag-select input{display:none}
+
+  .type-select{display:flex;gap:6px;margin-top:4px}
+  .type-select label{display:inline-flex;align-items:center;gap:4px;padding:6px 16px;border-radius:3px;font-size:13px;background:transparent;border:1px solid var(--b);color:var(--t2);cursor:pointer;transition:all .15s;margin:0;font-weight:500}
+  .type-select label:has(input:checked){background:#fff;color:#000;border-color:#fff}
+  .type-select input{display:none}
+
+  .lightbox{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.95);backdrop-filter:blur(12px);align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:24px}
+  .lightbox.show{display:flex}
+  .lightbox img{max-width:90vw;max-height:70vh;border-radius:var(--r);object-fit:contain}
+  .lightbox-prompt{max-width:640px;text-align:center;font-size:13px;line-height:1.6;color:var(--t)}
+  .lightbox-close{position:absolute;top:16px;right:20px;font-size:13px;cursor:pointer;color:var(--t2);background:none;border:1px solid var(--b);border-radius:3px;padding:4px 10px;transition:all .15s}
+  .lightbox-close:hover{color:#fff;border-color:#444}
+  .lightbox-actions{display:flex;gap:8px}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:8px 18px;border-radius:3px;font-size:12px;font-weight:500;color:#000;z-index:999;opacity:0;transition:opacity .25s;pointer-events:none}
+  .toast.show{opacity:1}
+  .toast.success{background:#00d68f}
+  .toast.error{background:#ff4d6a;color:#fff}
+  .toast.info{background:#fff}
+
+  .empty{grid-column:1/-1;text-align:center;padding:80px 20px}
+  .empty p{color:var(--t2);font-size:14px;margin-bottom:16px}
+
+  @media(max-width:600px){.gallery{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;padding:12px}.header{padding:12px 16px}.tag-bar{padding:8px 16px}.card-body{padding:10px}.card-prompt{font-size:12px;-webkit-line-clamp:2}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">PROMPT GALLERY</div>
+  <div class="search-box"><input type="text" id="searchInput" placeholder="搜索提示词或标签…"></div>
+  <div class="header-actions">
+    <button class="btn btn-primary" onclick="openAddModal()">添加</button>
+    <button class="btn" onclick="exportData()">导出</button>
+    <button class="btn" onclick="document.getElementById('importFile').click()">导入</button>
+  </div>
+</div>
+
+<div class="tag-bar" id="tagBar"></div>
+<div class="stats-bar" id="statsBar"></div>
+<div class="gallery" id="gallery"></div>
+
+<div class="modal-mask" id="addModal">
+  <div class="modal">
+    <h2 id="modalTitle">添加图片</h2>
+    <input type="hidden" id="editId">
+    <label>图片（可选）</label>
+    <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+      <p>点击或拖拽上传</p>
+      <input type="file" id="fileInput" accept="image/*" style="display:none">
+    </div>
+    <img id="dropzonePreview" class="dropzone-preview" style="display:none">
+    <div class="url-or">或输入图片 URL</div>
+    <input type="text" id="imgUrl" placeholder="https://...">
+    <label>提示词 *</label>
+    <textarea id="promptText" placeholder="输入提示词…"></textarea>
+    <label>类型 *</label>
+    <div class="type-select" id="typeSelect">
+      <label><input type="radio" name="itemType" value="文生图">文生图</label>
+      <label><input type="radio" name="itemType" value="图生图">图生图</label>
+    </div>
+    <label>标签</label>
+    <div class="tag-select" id="tagSelect"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeAddModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveCard()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" onclick="closeLightbox()">关闭</button>
+  <img id="lbImg">
+  <div class="lightbox-prompt" id="lbPrompt"></div>
+  <div class="lightbox-actions">
+    <button class="btn btn-primary" onclick="copyLbPrompt()">复制提示词</button>
+    <button class="btn" onclick="closeLightbox()">关闭</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<input type="file" id="importFile" accept=".json" style="display:none">
+
+<script>
+let allTags=[],items=[],activeTag=null,activeType=null,lbPrompt='',pendingFile=null;
+const api=async(p,o)=>(await fetch('/api'+p,o)).json();
+
+async function init(){allTags=await api('/tags');renderTagSelect();await loadItems();}
+async function loadItems(){
+  const p=new URLSearchParams();
+  if(activeTag)p.set('tag',activeTag);
+  if(activeType)p.set('type',activeType);
+  const q=document.getElementById('searchInput').value.trim();
+  if(q)p.set('q',q);
+  items=await api('/items?'+p.toString());
+  renderGallery();renderTagBar();renderStats();
+}
+
+function renderTagSelect(){
+  document.getElementById('tagSelect').innerHTML=allTags.map(t=>
+    `<label><input type="checkbox" value="${esc(t)}">${esc(t)}</label>`).join('');
+}
+function renderTagBar(){
+  document.getElementById('tagBar').innerHTML=
+    `<span class="tag-chip ${!activeType?'active':''}" onclick="filterType(null)">全部类型</span>`+
+    `<span class="tag-chip ${activeType==='文生图'?'active':''}" onclick="filterType('文生图')">文生图</span>`+
+    `<span class="tag-chip ${activeType==='图生图'?'active':''}" onclick="filterType('图生图')">图生图</span>`+
+    `<span style="width:1px;height:20px;background:var(--b);margin:0 4px"></span>`+
+    `<span class="tag-chip ${!activeTag?'active':''}" onclick="filterTag(null)">全部标签</span>`+
+    allTags.map(t=>`<span class="tag-chip ${activeTag===t?'active':''}" onclick="filterTag('${esc(t)}')">${esc(t)}</span>`).join('');
+}
+function renderStats(){
+  document.getElementById('statsBar').innerHTML=`${items.length} 张图片`+(activeTag?` · ${esc(activeTag)}`:'');
+}
+function renderGallery(){
+  const g=document.getElementById('gallery');
+  if(!items.length){g.innerHTML=`<div class="empty"><p>暂无图片</p><button class="btn btn-primary" onclick="openAddModal()">添加图片</button></div>`;return;}
+  g.innerHTML=items.map(item=>{
+    const img=item.url?`<img src="${esc(item.url)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<div class=no-img>NO IMAGE</div>'">`:`<div class="no-img">NO IMAGE</div>`;
+    const badge=item.type?`<span class="type-badge ${item.type==='文生图'?'t2i':'i2i'}">${esc(item.type)}</span>`:'';
+    return`<div class="card"><div class="card-img-wrap" onclick="openLightbox('${item.id}')">${badge}${img}<div class="overlay"><span class="view-btn">查看</span></div></div><div class="card-body"><div class="card-prompt">${esc(item.prompt)}</div><div class="card-tags">${item.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div><div class="card-footer"><span class="card-time">${fmtTime(item.time)}</span><div class="card-actions"><button onclick="copyPrompt('${item.id}',this)">复制</button><button onclick="editCard('${item.id}')">编辑</button><button class="del-btn" onclick="deleteCard('${item.id}')">删除</button></div></div></div></div>`;
+  }).join('');
+}
+
+function filterTag(t){activeTag=(activeTag===t)?null:t;loadItems();}
+function filterType(t){activeType=(activeType===t)?null:t;loadItems();}
+
+function openAddModal(){
+  document.getElementById('editId').value='';document.getElementById('modalTitle').textContent='添加图片';
+  document.getElementById('promptText').value='';document.getElementById('imgUrl').value='';
+  document.getElementById('dropzonePreview').style.display='none';document.getElementById('dropzone').style.display='';
+  pendingFile=null;document.querySelectorAll('#tagSelect input').forEach(c=>c.checked=false);
+  document.querySelectorAll('#typeSelect input').forEach(c=>c.checked=false);
+  document.getElementById('addModal').classList.add('show');
+}
+function closeAddModal(){document.getElementById('addModal').classList.remove('show');pendingFile=null;}
+
+function editCard(id){
+  const item=items.find(d=>d.id===id);if(!item)return;
+  document.getElementById('editId').value=id;document.getElementById('modalTitle').textContent='编辑图片';
+  document.getElementById('promptText').value=item.prompt;
+  document.getElementById('imgUrl').value=(item.url&&!item.url.startsWith('/images/'))?item.url:'';
+  document.querySelectorAll('#tagSelect input').forEach(c=>c.checked=item.tags.includes(c.value));
+  document.querySelectorAll('#typeSelect input').forEach(c=>c.checked=c.value===item.type);
+  pendingFile=null;document.getElementById('dropzonePreview').style.display='none';document.getElementById('dropzone').style.display='';
+  document.getElementById('addModal').classList.add('show');
+}
+
+async function saveCard(){
+  const eid=document.getElementById('editId').value;
+  const prompt=document.getElementById('promptText').value.trim();
+  const url=document.getElementById('imgUrl').value.trim();
+  const tags=[...document.querySelectorAll('#tagSelect input:checked')].map(c=>c.value);
+  const typeEl=document.querySelector('#typeSelect input:checked');
+  if(!prompt)return toast('请输入提示词','error');
+  if(!typeEl)return toast('请选择类型','error');
+  const fd=new FormData();fd.append('prompt',prompt);fd.append('type',typeEl.value);fd.append('tags',tags.join(','));
+  if(pendingFile)fd.append('image',pendingFile);else if(url)fd.append('url',url);
+  if(eid){await api('/items/'+eid,{method:'PUT',body:fd});toast('已更新','success');}
+  else{await api('/items',{method:'POST',body:fd});toast('已添加','success');}
+  closeAddModal();await loadItems();
+}
+
+document.getElementById('fileInput').addEventListener('change',e=>{if(e.target.files[0])setFile(e.target.files[0]);});
+const dz=document.getElementById('dropzone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dragover');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('dragover'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('dragover');if(e.dataTransfer.files[0])setFile(e.dataTransfer.files[0]);});
+function setFile(f){pendingFile=f;const r=new FileReader();r.onload=()=>{const p=document.getElementById('dropzonePreview');p.src=r.result;p.style.display='block';document.getElementById('dropzone').style.display='none';};r.readAsDataURL(f);}
+
+async function deleteCard(id){if(!confirm('确定删除？'))return;await api('/items/'+id,{method:'DELETE'});toast('已删除','info');await loadItems();}
+
+function copyPrompt(id,btn){
+  const item=items.find(d=>d.id===id);if(!item)return;
+  navigator.clipboard.writeText(item.prompt).then(()=>{btn.textContent='OK';btn.classList.add('copied');setTimeout(()=>{btn.textContent='复制';btn.classList.remove('copied');},1000);toast('已复制','success');});
+}
+
+function openLightbox(id){
+  const item=items.find(d=>d.id===id);if(!item)return;
+  document.getElementById('lbImg').src=item.url||'';document.getElementById('lbImg').style.display=item.url?'':'none';
+  document.getElementById('lbPrompt').textContent=item.prompt;lbPrompt=item.prompt;
+  document.getElementById('lightbox').classList.add('show');
+}
+function closeLightbox(){document.getElementById('lightbox').classList.remove('show');}
+function copyLbPrompt(){navigator.clipboard.writeText(lbPrompt).then(()=>toast('已复制','success'));}
+document.getElementById('lightbox').addEventListener('click',e=>{if(e.target===e.currentTarget)closeLightbox();});
+
+async function exportData(){const r=await fetch('/api/export');const b=await r.blob();const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`gallery-${new Date().toISOString().slice(0,10)}.json`;a.click();toast('已导出','success');}
+document.getElementById('importFile').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!Array.isArray(d))throw 0;const r=await api('/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});toast(`已导入 ${r.imported} 张`,'success');await loadItems();}catch{toast('导入失败','error');}e.value='';});
+
+let st;document.getElementById('searchInput').addEventListener('input',()=>{clearTimeout(st);st=setTimeout(loadItems,300);});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeAddModal();closeLightbox();}});
+
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function fmtTime(t){const d=Date.now()-t;if(d<6e4)return'刚刚';if(d<36e5)return Math.floor(d/6e4)+'分钟前';if(d<864e5)return Math.floor(d/36e5)+'小时前';if(d<6048e5)return Math.floor(d/864e5)+'天前';return new Date(t).toLocaleDateString('zh-CN');}
+function toast(m,t='info'){const el=document.getElementById('toast');el.textContent=m;el.className='toast show '+t;clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),1500);}
+init();
+</script>
+</body>
+</html>

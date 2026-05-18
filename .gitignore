@@ -1,0 +1,7 @@
+node_modules/
+data/images/*
+!data/images/.gitkeep
+data/db.json
+data/tmp/
+export.json
+export-data.js
