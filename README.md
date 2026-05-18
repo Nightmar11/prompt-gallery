@@ -1,6 +1,10 @@
 # Prompt Gallery
 
-本地图片与提示词管理工具。
+本地图片与提示词管理工具，支持在线部署。
+
+## 在线访问
+
+**https://prompt-gallery-cvib.onrender.com/**
 
 ## 快速开始
 
@@ -19,7 +23,7 @@ npm start
 编辑 `server.js` 第 9 行：
 
 ```js
-const PORT = process.env.PORT || 3001;  // 改成你想要的端口
+const PORT = process.env.PORT || 3001;
 ```
 
 或启动时临时指定：
@@ -68,3 +72,11 @@ prompt-gallery/
     ├── db.json       # 元数据（自动生成）
     └── images/       # 上传的图片
 ```
+
+## 部署到 Render
+
+1. 推送代码到 GitHub
+2. 在 Render 创建 Web Service
+3. Build Command: `npm install`
+4. Start Command: `node server.js`
+5. Plan: Free

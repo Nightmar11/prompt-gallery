@@ -2,6 +2,8 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -19,27 +21,79 @@ const IMG_DIR = path.join(DATA_DIR, 'images');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 
 fs.mkdirSync(IMG_DIR, { recursive: true });
+fs.mkdirSync(path.join(DATA_DIR, 'tmp'), { recursive: true });
 if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, '[]', 'utf-8');
 
 const readDB = () => JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
-const writeDB = (d) => fs.writeFileSync(DB_FILE, JSON.stringify(d, null, 2), 'utf-8');
+const writeDB = (d) => {
+  fs.writeFileSync(DB_FILE, JSON.stringify(d, null, 2), 'utf-8');
+  syncDBToCloudinary();
+};
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
-const upload = multer({
-  dest: path.join(DATA_DIR, 'tmp'),
-  limits: { fileSize: 20 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    file.mimetype.startsWith('image/') ? cb(null, true) : cb(new Error('只允许上传图片'));
+const useCloudinary = !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
+let upload;
+
+if (useCloudinary) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+  });
+  const cloudStorage = new CloudinaryStorage({
+    cloudinary,
+    params: { folder: 'prompt-gallery', allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp'] }
+  });
+  upload = multer({ storage: cloudStorage, limits: { fileSize: 20 * 1024 * 1024 } });
+  console.log('Using Cloudinary for image storage');
+} else {
+  upload = multer({
+    dest: path.join(DATA_DIR, 'tmp'),
+    limits: { fileSize: 20 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      file.mimetype.startsWith('image/') ? cb(null, true) : cb(new Error('只允许上传图片'));
+    }
+  });
+}
+
+function syncDBToCloudinary() {
+  if (!useCloudinary) return;
+  try {
+    const tmpFile = path.join(DATA_DIR, 'tmp', 'db-sync.json');
+    fs.copyFileSync(DB_FILE, tmpFile);
+    cloudinary.uploader.upload(tmpFile, {
+      resource_type: 'raw',
+      public_id: 'prompt-gallery/db.json',
+      overwrite: true
+    }).then(() => {
+      if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+    }).catch(e => {
+      console.error('Failed to sync db.json to Cloudinary:', e.message);
+    });
+  } catch (e) {
+    console.error('Failed to sync db.json to Cloudinary:', e.message);
   }
-});
+}
+
+async function syncDBFromCloudinary() {
+  if (!useCloudinary) return;
+  try {
+    const url = cloudinary.url('prompt-gallery/db.json', { resource_type: 'raw' });
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+      console.log('Synced db.json from Cloudinary');
+    }
+  } catch (e) {
+    console.error('Failed to sync db.json from Cloudinary:', e.message);
+  }
+}
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/images', express.static(IMG_DIR));
-
-// ── 健康检查 ──
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 // ── 标签 ──
 app.get('/api/tags', (req, res) => res.json(TAGS));
@@ -74,10 +128,14 @@ app.post('/api/items', upload.single('image'), (req, res) => {
 
   let url = '';
   if (req.file) {
-    const ext = path.extname(req.file.originalname) || '.png';
-    const filename = uid() + ext;
-    fs.renameSync(req.file.path, path.join(IMG_DIR, filename));
-    url = '/images/' + filename;
+    if (useCloudinary) {
+      url = req.file.path;
+    } else {
+      const ext = path.extname(req.file.originalname) || '.png';
+      const filename = uid() + ext;
+      fs.renameSync(req.file.path, path.join(IMG_DIR, filename));
+      url = '/images/' + filename;
+    }
   } else if (req.body.url && req.body.url.trim()) {
     url = req.body.url.trim();
   }
@@ -103,14 +161,18 @@ app.put('/api/items/:id', upload.single('image'), (req, res) => {
   }
 
   if (req.file) {
-    if (item.url && item.url.startsWith('/images/')) {
-      const old = path.join(IMG_DIR, path.basename(item.url));
-      if (fs.existsSync(old)) fs.unlinkSync(old);
+    if (useCloudinary) {
+      item.url = req.file.path;
+    } else {
+      if (item.url && item.url.startsWith('/images/')) {
+        const old = path.join(IMG_DIR, path.basename(item.url));
+        if (fs.existsSync(old)) fs.unlinkSync(old);
+      }
+      const ext = path.extname(req.file.originalname) || '.png';
+      const filename = uid() + ext;
+      fs.renameSync(req.file.path, path.join(IMG_DIR, filename));
+      item.url = '/images/' + filename;
     }
-    const ext = path.extname(req.file.originalname) || '.png';
-    const filename = uid() + ext;
-    fs.renameSync(req.file.path, path.join(IMG_DIR, filename));
-    item.url = '/images/' + filename;
   } else if (req.body.url !== undefined) {
     if (item.url && item.url.startsWith('/images/') && req.body.url !== item.url) {
       const old = path.join(IMG_DIR, path.basename(item.url));
@@ -189,8 +251,10 @@ app.post('/api/import', (req, res) => {
   res.json({ imported: count });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n  Prompt Gallery`);
-  console.log(`  http://localhost:${PORT}`);
-  console.log(`  Tags: ${TAGS.join(', ')}\n`);
+syncDBFromCloudinary().then(() => {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n  Prompt Gallery`);
+    console.log(`  http://localhost:${PORT}`);
+    console.log(`  Tags: ${TAGS.join(', ')}\n`);
+  });
 });

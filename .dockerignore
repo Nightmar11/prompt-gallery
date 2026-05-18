@@ -1,10 +1,7 @@
 node_modules
-data/images
 data/tmp
-data/db.json
 .git
 .gitignore
 *.md
 start.bat
-render.yaml
 fly.toml
