@@ -64,8 +64,35 @@ function syncDBToCloudinary() {
     const tmpFile = path.join(tmpDir, 'db-sync.json');
     fs.copyFileSync(DB_FILE, tmpFile);
     const { execFileSync } = require('child_process');
-    const script = `const c=require('cloudinary').v2;const fs=require('fs');c.config({cloud_name:process.env.CLOUDINARY_CLOUD_NAME,api_key:process.env.CLOUDINARY_API_KEY,api_secret:process.env.CLOUDINARY_API_SECRET});c.uploader.upload(process.argv[1],{resource_type:'raw',public_id:'prompt-gallery/db.json',overwrite:true}).then(()=>{fs.unlinkSync(process.argv[1]);process.exit(0)}).catch(e=>{console.error(e.message);process.exit(1)})`;
-    execFileSync('node', ['-e', script, tmpFile], { timeout: 30000, stdio: 'pipe', env: process.env });
+    const uploadScript = `
+      const c = require('cloudinary').v2;
+      c.config({
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+        api_key: process.env.CLOUDINARY_API_KEY,
+        api_secret: process.env.CLOUDINARY_API_SECRET
+      });
+      c.uploader.upload(process.env.UPLOAD_FILE, {
+        resource_type: 'raw',
+        public_id: 'prompt-gallery/db.json',
+        overwrite: true
+      }).then(() => {
+        const fs = require('fs');
+        fs.unlinkSync(process.env.UPLOAD_FILE);
+        process.exit(0);
+      }).catch(e => {
+        console.error('Upload error:', e.message);
+        process.exit(1);
+      });
+    `;
+    const scriptFile = path.join(tmpDir, 'upload.js');
+    fs.writeFileSync(scriptFile, uploadScript);
+    execFileSync('node', [scriptFile], {
+      timeout: 30000,
+      stdio: 'pipe',
+      env: { ...process.env, UPLOAD_FILE: tmpFile }
+    });
+    if (fs.existsSync(scriptFile)) fs.unlinkSync(scriptFile);
+    if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
     console.log('Synced db.json to Cloudinary');
   } catch (e) {
     console.error('Failed to sync db.json to Cloudinary:', e.message);
