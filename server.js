@@ -59,21 +59,13 @@ if (useCloudinary) {
 function syncDBToCloudinary() {
   if (!useCloudinary) return;
   try {
-    const tmpFile = path.join(DATA_DIR, 'tmp', 'db-sync.json');
+    const tmpDir = path.join(DATA_DIR, 'tmp');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const tmpFile = path.join(tmpDir, 'db-sync.json');
     fs.copyFileSync(DB_FILE, tmpFile);
-    const { execSync } = require('child_process');
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-    const apiKey = process.env.CLOUDINARY_API_KEY;
-    const apiSecret = process.env.CLOUDINARY_API_SECRET;
-    const timestamp = Math.floor(Date.now() / 1000);
-    const folder = 'prompt-gallery';
-    const publicId = 'db.json';
-    const paramsToSign = `folder=${folder}&overwrite=true&public_id=${publicId}&resource_type=raw&timestamp=${timestamp}`;
-    const crypto = require('crypto');
-    const signature = crypto.createHash('sha1').update(paramsToSign + apiSecret).digest('hex');
-    const curlCmd = `curl -s -X POST "https://api.cloudinary.com/v1_1/${cloudName}/raw/upload" -F "folder=${folder}" -F "public_id=${publicId}" -F "resource_type=raw" -F "overwrite=true" -F "timestamp=${timestamp}" -F "api_key=${apiKey}" -F "signature=${signature}" -F "file=@${tmpFile}"`;
-    execSync(curlCmd, { timeout: 30000 });
-    if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+    const { execFileSync } = require('child_process');
+    const script = `const c=require('cloudinary').v2;const fs=require('fs');c.config({cloud_name:process.env.CLOUDINARY_CLOUD_NAME,api_key:process.env.CLOUDINARY_API_KEY,api_secret:process.env.CLOUDINARY_API_SECRET});c.uploader.upload(process.argv[1],{resource_type:'raw',public_id:'prompt-gallery/db.json',overwrite:true}).then(()=>{fs.unlinkSync(process.argv[1]);process.exit(0)}).catch(e=>{console.error(e.message);process.exit(1)})`;
+    execFileSync('node', ['-e', script, tmpFile], { timeout: 30000, stdio: 'pipe', env: process.env });
     console.log('Synced db.json to Cloudinary');
   } catch (e) {
     console.error('Failed to sync db.json to Cloudinary:', e.message);
@@ -81,14 +73,20 @@ function syncDBToCloudinary() {
 }
 
 async function syncDBFromCloudinary() {
-  if (!useCloudinary) return;
+  if (!useCloudinary) {
+    console.log('Cloudinary not configured, using local db.json');
+    return;
+  }
   try {
     const url = cloudinary.url('prompt-gallery/db.json', { resource_type: 'raw' });
+    console.log('Fetching db.json from:', url);
     const res = await fetch(url);
     if (res.ok) {
       const data = await res.json();
       fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
-      console.log('Synced db.json from Cloudinary');
+      console.log('Synced db.json from Cloudinary, items:', data.length);
+    } else {
+      console.log('Cloudinary db.json not found, using local (status:', res.status, ')');
     }
   } catch (e) {
     console.error('Failed to sync db.json from Cloudinary:', e.message);
