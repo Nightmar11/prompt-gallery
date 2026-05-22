@@ -25,9 +25,9 @@ fs.mkdirSync(path.join(DATA_DIR, 'tmp'), { recursive: true });
 if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, '[]', 'utf-8');
 
 const readDB = () => JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
-const writeDB = (d) => {
+const writeDB = async (d) => {
   fs.writeFileSync(DB_FILE, JSON.stringify(d, null, 2), 'utf-8');
-  syncDBToCloudinary();
+  await syncDBToCloudinary();
 };
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
@@ -56,43 +56,14 @@ if (useCloudinary) {
   });
 }
 
-function syncDBToCloudinary() {
+async function syncDBToCloudinary() {
   if (!useCloudinary) return;
   try {
-    const tmpDir = path.join(DATA_DIR, 'tmp');
-    fs.mkdirSync(tmpDir, { recursive: true });
-    const tmpFile = path.join(tmpDir, 'db-sync.json');
-    fs.copyFileSync(DB_FILE, tmpFile);
-    const { execFileSync } = require('child_process');
-    const uploadScript = `
-      const c = require('cloudinary').v2;
-      c.config({
-        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-        api_key: process.env.CLOUDINARY_API_KEY,
-        api_secret: process.env.CLOUDINARY_API_SECRET
-      });
-      c.uploader.upload(process.env.UPLOAD_FILE, {
-        resource_type: 'raw',
-        public_id: 'prompt-gallery/db.json',
-        overwrite: true
-      }).then(() => {
-        const fs = require('fs');
-        fs.unlinkSync(process.env.UPLOAD_FILE);
-        process.exit(0);
-      }).catch(e => {
-        console.error('Upload error:', e.message);
-        process.exit(1);
-      });
-    `;
-    const scriptFile = path.join(tmpDir, 'upload.js');
-    fs.writeFileSync(scriptFile, uploadScript);
-    execFileSync('node', [scriptFile], {
-      timeout: 30000,
-      stdio: 'pipe',
-      env: { ...process.env, UPLOAD_FILE: tmpFile }
+    await cloudinary.uploader.upload(DB_FILE, {
+      resource_type: 'raw',
+      public_id: 'prompt-gallery/db.json',
+      overwrite: true
     });
-    if (fs.existsSync(scriptFile)) fs.unlinkSync(scriptFile);
-    if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
     console.log('Synced db.json to Cloudinary');
   } catch (e) {
     console.error('Failed to sync db.json to Cloudinary:', e.message);
@@ -149,7 +120,7 @@ app.get('/api/items', (req, res) => {
 });
 
 // ── 添加 ──
-app.post('/api/items', upload.single('image'), (req, res) => {
+app.post('/api/items', upload.single('image'), async (req, res) => {
   const { prompt } = req.body;
   if (!prompt || !prompt.trim()) return res.status(400).json({ error: '提示词不能为空' });
 
@@ -176,12 +147,12 @@ app.post('/api/items', upload.single('image'), (req, res) => {
   const item = { id: uid(), url, prompt: prompt.trim(), type, tags, time: Date.now() };
   const db = readDB();
   db.push(item);
-  writeDB(db);
+  await writeDB(db);
   res.json(item);
 });
 
 // ── 编辑 ──
-app.put('/api/items/:id', upload.single('image'), (req, res) => {
+app.put('/api/items/:id', upload.single('image'), async (req, res) => {
   const db = readDB();
   const idx = db.findIndex(d => d.id === req.params.id);
   if (idx < 0) return res.status(404).json({ error: '未找到' });
@@ -214,12 +185,12 @@ app.put('/api/items/:id', upload.single('image'), (req, res) => {
     item.url = req.body.url.trim();
   }
 
-  writeDB(db);
+  await writeDB(db);
   res.json(item);
 });
 
 // ── 删除 ──
-app.delete('/api/items/:id', (req, res) => {
+app.delete('/api/items/:id', async (req, res) => {
   const db = readDB();
   const idx = db.findIndex(d => d.id === req.params.id);
   if (idx < 0) return res.status(404).json({ error: '未找到' });
@@ -229,7 +200,7 @@ app.delete('/api/items/:id', (req, res) => {
     const fpath = path.join(IMG_DIR, path.basename(item.url));
     if (fs.existsSync(fpath)) fs.unlinkSync(fpath);
   }
-  writeDB(db);
+  await writeDB(db);
   res.json({ ok: true });
 });
 
@@ -253,7 +224,7 @@ app.get('/api/export', (req, res) => {
 });
 
 // ── 导入（base64 还原为本地文件）──
-app.post('/api/import', (req, res) => {
+app.post('/api/import', async (req, res) => {
   const imported = req.body;
   if (!Array.isArray(imported)) return res.status(400).json({ error: '格式错误' });
 
@@ -280,7 +251,7 @@ app.post('/api/import', (req, res) => {
       count++;
     }
   });
-  writeDB(db);
+  await writeDB(db);
   res.json({ imported: count });
 });
 
