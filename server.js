@@ -72,17 +72,11 @@ async function syncDBToCloudinary() {
 }
 
 async function syncDBFromCloudinary() {
-  console.log('syncDBFromCloudinary called, useCloudinary:', useCloudinary);
-  console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME ? 'set' : 'NOT SET');
-  if (!useCloudinary) {
-    console.log('Cloudinary not configured, using local db.json');
-    return;
-  }
+  if (!useCloudinary) return;
   try {
-    const url = cloudinary.url('prompt-gallery/db.json', { resource_type: 'raw' });
-    console.log('Fetching db.json from:', url);
-    const res = await fetch(url);
-    console.log('Fetch response status:', res.status);
+    const result = await cloudinary.api.resource('prompt-gallery/db.json', { resource_type: 'raw' });
+    console.log('Fetching db.json from:', result.url);
+    const res = await fetch(result.url);
     if (res.ok) {
       const data = await res.json();
       fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
