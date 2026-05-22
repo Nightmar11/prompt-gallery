@@ -61,15 +61,20 @@ function syncDBToCloudinary() {
   try {
     const tmpFile = path.join(DATA_DIR, 'tmp', 'db-sync.json');
     fs.copyFileSync(DB_FILE, tmpFile);
-    cloudinary.uploader.upload(tmpFile, {
-      resource_type: 'raw',
-      public_id: 'prompt-gallery/db.json',
-      overwrite: true
-    }).then(() => {
-      if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
-    }).catch(e => {
-      console.error('Failed to sync db.json to Cloudinary:', e.message);
-    });
+    const { execSync } = require('child_process');
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+    const timestamp = Math.floor(Date.now() / 1000);
+    const folder = 'prompt-gallery';
+    const publicId = 'db.json';
+    const paramsToSign = `folder=${folder}&overwrite=true&public_id=${publicId}&resource_type=raw&timestamp=${timestamp}`;
+    const crypto = require('crypto');
+    const signature = crypto.createHash('sha1').update(paramsToSign + apiSecret).digest('hex');
+    const curlCmd = `curl -s -X POST "https://api.cloudinary.com/v1_1/${cloudName}/raw/upload" -F "folder=${folder}" -F "public_id=${publicId}" -F "resource_type=raw" -F "overwrite=true" -F "timestamp=${timestamp}" -F "api_key=${apiKey}" -F "signature=${signature}" -F "file=@${tmpFile}"`;
+    execSync(curlCmd, { timeout: 30000 });
+    if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+    console.log('Synced db.json to Cloudinary');
   } catch (e) {
     console.error('Failed to sync db.json to Cloudinary:', e.message);
   }
