@@ -59,12 +59,13 @@ if (useCloudinary) {
 async function syncDBToCloudinary() {
   if (!useCloudinary) return;
   try {
-    await cloudinary.uploader.upload(DB_FILE, {
+    const result = await cloudinary.uploader.upload(DB_FILE, {
       resource_type: 'raw',
       public_id: 'prompt-gallery/db.json',
-      overwrite: true
+      overwrite: true,
+      invalidate: true
     });
-    console.log('Synced db.json to Cloudinary');
+    console.log('Synced db.json to Cloudinary, version:', result.version);
   } catch (e) {
     console.error('Failed to sync db.json to Cloudinary:', e.message);
   }
